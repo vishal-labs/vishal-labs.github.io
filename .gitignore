@@ -13,3 +13,6 @@ homelab-setup.md
 .impeccable/review/
 .impeccable/hook.cache.json
 .impeccable/questions/
+
+# private project handbook: design choices, owner preferences, codebase notes
+PROJECT_HANDBOOK.md
