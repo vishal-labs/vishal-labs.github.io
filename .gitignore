@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.DS_Store
+.impeccable/config.local.json
+
+# private homelab notes (real IPs, domain, ports): never publish
+homelab-setup.md
+
+# impeccable working files: review screenshots, hook cache, decision-page state (all regenerable)
+.impeccable/review/
+.impeccable/hook.cache.json
+.impeccable/questions/
