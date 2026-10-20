@@ -16,3 +16,8 @@ homelab-setup.md
 
 # private project handbook: design choices, owner preferences, codebase notes
 PROJECT_HANDBOOK.md
+
+# internal design records: kept local, not published
+PRODUCT.md
+DESIGN.md
+.impeccable/
