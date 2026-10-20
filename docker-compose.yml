@@ -4,9 +4,10 @@ services:
     image: vishal-labs/portfolio:latest
     container_name: portfolio
     restart: unless-stopped
-    # host port is yours to pick; point Nginx Proxy Manager (or anything) at it
+    # listens on every interface (0.0.0.0) so other devices and Nginx Proxy Manager can
+    # reach it; the host port is yours to pick
     ports:
-      - "${PORTFOLIO_PORT:-8088}:8080"
+      - "0.0.0.0:${PORTFOLIO_PORT:-8088}:8080"
     read_only: true
     tmpfs:
       - /tmp
