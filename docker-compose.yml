@@ -1,0 +1,22 @@
+services:
+  portfolio:
+    build: .
+    image: vishal-labs/portfolio:latest
+    container_name: portfolio
+    restart: unless-stopped
+    # host port is yours to pick; point Nginx Proxy Manager (or anything) at it
+    ports:
+      - "${PORTFOLIO_PORT:-8088}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

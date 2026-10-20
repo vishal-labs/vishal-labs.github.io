@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+.git
+.impeccable
+*.md
+homelab-setup.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
