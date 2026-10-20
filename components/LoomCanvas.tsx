@@ -82,8 +82,10 @@ export default function LoomCanvas({ scene, className, ext, pin }: Props) {
     box.addEventListener("pointermove", onMove, { passive: true });
     box.addEventListener("pointerleave", onLeave);
 
+    // short screens (phones in landscape) can't hold a pinned stage, so it scrolls normally
+    const short = window.innerHeight < 560;
     const trigger = ScrollTrigger.create(
-      pin && !reduced
+      pin && !reduced && !short
         ? {
             trigger: section,
             start: "top top",

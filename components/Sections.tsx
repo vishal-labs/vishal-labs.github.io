@@ -146,9 +146,7 @@ export function Close() {
           <a className="btn" href={LINKS.linkedin} target="_blank" rel="noreferrer">
             Message me on LinkedIn <ArrowUpRight />
           </a>
-          <a className="link" href={LINKS.github} target="_blank" rel="noreferrer">GitHub <ArrowUpRight /></a>
-          <a className="link" href={LINKS.hashnode} target="_blank" rel="noreferrer">Hashnode <ArrowUpRight /></a>
-          <a className="link" href={LINKS.x} target="_blank" rel="noreferrer">X <ArrowUpRight /></a>
+          <a className="link" href={LINKS.hashnode} target="_blank" rel="noreferrer">Read my blog on Hashnode <ArrowUpRight /></a>
         </div>
       </div>
       <footer className="footer zari">

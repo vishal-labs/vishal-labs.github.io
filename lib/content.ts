@@ -1,11 +1,9 @@
 // All site copy lives here. Facts come from PRODUCT.md; nothing here may be invented.
 
-// TODO(vishal): replace the remaining placeholder handles (hashnode, x) with your real profiles.
+// The only two ways to reach me from the site.
 export const LINKS = {
   linkedin: "https://www.linkedin.com/in/vishaldodda",
-  github: "https://github.com/vishal-labs",
-  hashnode: "https://your-blog.hashnode.dev",
-  x: "https://x.com/your-handle",
+  hashnode: "https://blogdevops.hashnode.dev/",
 } as const;
 
 export type Domain = "sre" | "ai" | "web3";
@@ -154,7 +152,7 @@ export const DOMAINS: {
         title: "Westend validator",
         summary: "A Substrate validator on the Westend testnet, with proxy-account staking, session-key rotation, and chill and unchill drills, run as a dedicated service user.",
         tags: ["substrate", "polkadot", "staking", "linux"],
-        href: "https://github.com/vishal-labs/luganodes-SRE-task-vishal-23BAI0025",
+        // the repo is private, so no source link
       },
       {
         title: "ML credit-scored lending",

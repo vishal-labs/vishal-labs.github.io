@@ -17,7 +17,7 @@ export default function Converge() {
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       const { width, height } = e.contentRect;
-      setHorizontal(width > height * 1.05);
+      setHorizontal(width >= 560 && width > height * 1.05);
     });
     ro.observe(el);
 
@@ -33,12 +33,18 @@ export default function Converge() {
         for (const c of chips()) c.style.opacity = String(Math.min(1, Math.max(0, net * 4 - Number(c.dataset.l) + 0.4)));
       };
       apply(0);
-      st = ScrollTrigger.create({
-        trigger: el.closest("section"),
-        start: "top top",
-        end: () => "+=" + window.innerHeight * (matchMedia("(max-width: 720px)").matches ? 0.9 : 1.4),
-        onUpdate: (s) => apply(s.progress),
-      });
+      // same range the canvas uses: the pin on normal screens, plain scroll on short ones
+      const short = window.innerHeight < 560;
+      st = ScrollTrigger.create(
+        short
+          ? { trigger: el.closest("section"), start: "top bottom", end: "bottom top", onUpdate: (s) => apply(s.progress) }
+          : {
+              trigger: el.closest("section"),
+              start: "top top",
+              end: () => "+=" + window.innerHeight * (matchMedia("(max-width: 720px)").matches ? 0.9 : 1.4),
+              onUpdate: (s) => apply(s.progress),
+            },
+      );
     }
     return () => { ro.disconnect(); st?.kill(); };
   }, []);

@@ -767,6 +767,9 @@ function agents(): Scene {
 // ───────────────────────── converge: three wefts weave a network ─────────────────────────
 const LAYERS = [3, 5, 6, 1];
 const LAYER_A = [0.46, 0.59, 0.71, 0.83];
+// tall stages need more room between layers, and the threads meet higher up
+const LAYER_A_TALL = [0.4, 0.55, 0.69, 0.87];
+export const convergePoint = (horizontal: boolean) => (horizontal ? CONVERGE_POINT : 0.27);
 // each node's domain colours the weft leaving it (0 sre, 1 ai, 2 web3, 3 zari)
 export const NET = [
   [{ full: "reliability", short: "sre", d: 0 }, { full: "models", short: "ai", d: 1 }, { full: "chains", short: "web3", d: 2 }],
@@ -794,7 +797,7 @@ export function convergeNodes(horizontal: boolean) {
   // tall screens flow downward and need wider rows so labels never collide
   const spacing = horizontal ? [0.13, 0.13, 0.12, 0.13] : [0.3, 0.16, 0.15, 0.16];
   return LAYERS.map((n, li) =>
-    Array.from({ length: n }, (_, k) => ({ a: LAYER_A[li], b: 0.5 + (k - (n - 1) / 2) * spacing[li] })),
+    Array.from({ length: n }, (_, k) => ({ a: (horizontal ? LAYER_A : LAYER_A_TALL)[li], b: 0.5 + (k - (n - 1) / 2) * spacing[li] })),
   );
 }
 export const toScreen = (a: number, b: number, horizontal: boolean) =>
@@ -803,7 +806,8 @@ export const toScreen = (a: number, b: number, horizontal: boolean) =>
 function converge(): Scene {
   return (r, f) => {
     const { w, h, t } = f;
-    const horizontal = w > h * 1.05;
+    // left-to-right only when there's real width for five chips per layer
+    const horizontal = w >= 560 && w > h * 1.05;
     const P = (a: number, b: number) => {
       const s = toScreen(a, b, horizontal);
       return [s.x * w, s.y * h] as const;
@@ -823,7 +827,7 @@ function converge(): Scene {
     }
 
     // three wefts sweep in to the fixed point
-    const F = P(CONVERGE_POINT, 0.5);
+    const F = P(convergePoint(horizontal), 0.5);
     const starts = horizontal ? [0.2, 0.5, 0.8] : [0.12, 0.5, 0.88];
     starts.forEach((b0, i) => {
       const steps = 40;
@@ -831,7 +835,7 @@ function converge(): Scene {
       let [px, py] = P(0, b0);
       for (let s = 1; s <= upto; s++) {
         const u = s / steps;
-        const a = CONVERGE_POINT * u;
+        const a = convergePoint(horizontal) * u;
         const b = lerp(b0, 0.5, u * u * (3 - 2 * u));
         const [x, y] = P(a, b);
         r.line(px, py, x, y, 5, WEFT[i]);
@@ -872,7 +876,7 @@ function converge(): Scene {
       starts.forEach((b0, i) => {
         const k = (t / 820 + i * 0.33) % 1;
         const u = k;
-        const [x, y] = P(CONVERGE_POINT * u, lerp(b0, 0.5, u * u * (3 - 2 * u)));
+        const [x, y] = P(convergePoint(horizontal) * u, lerp(b0, 0.5, u * u * (3 - 2 * u)));
         r.rect(x, y, 7, 7, WEFT[i]);
       });
     }
