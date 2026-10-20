@@ -1,6 +1,6 @@
 # vishal-labs portfolio
 
-My personal site, woven as a Jacquard loom: the homelab is the warp, every request a shuttle, and reliability, AI and web3 three silks that meet in a network built from real projects.
+My personal site, woven as a loom: the homelab is the warp, every request a shuttle, and reliability, AI and web3 three silks that meet in a network built from real projects.
 
 Next.js (static export), GSAP ScrollTrigger and a small WebGL2 renderer.
 
