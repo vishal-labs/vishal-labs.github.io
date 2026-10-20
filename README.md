@@ -33,6 +33,10 @@ docker build -t vishal-labs/portfolio .
 docker run -d --name portfolio -p 8088:8080 --read-only --tmpfs /tmp vishal-labs/portfolio
 ```
 
+### GitHub Pages
+
+`.github/workflows/pages.yml` builds the static export and deploys it on every push to `main`. In the repo's Settings → Pages, set **Source: GitHub Actions**. The site serves at https://vishal-labs.github.io/. For a custom domain, add it under Settings → Pages and point DNS at GitHub Pages.
+
 ### Behind Nginx Proxy Manager and a Cloudflare Tunnel
 
 1. Run the container on the Docker host and note the host port (8088 by default).
