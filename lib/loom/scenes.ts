@@ -769,6 +769,8 @@ const LAYERS = [3, 5, 6, 1];
 const LAYER_A = [0.46, 0.59, 0.71, 0.83];
 // tall stages need more room between layers, and the threads meet higher up
 const LAYER_A_TALL = [0.4, 0.55, 0.69, 0.87];
+// the clock runs from here to 1: threads enter, the network weaves, then pulses run forever
+export const CONVERGE_FROM = -0.35;
 export const convergePoint = (horizontal: boolean) => (horizontal ? CONVERGE_POINT : 0.27);
 // each node's domain colours the weft leaving it (0 sre, 1 ai, 2 web3, 3 zari)
 export const NET = [
@@ -812,9 +814,9 @@ function converge(): Scene {
       const s = toScreen(a, b, horizontal);
       return [s.x * w, s.y * h] as const;
     };
-    const p = f.reduced ? 1 : f.progress;
-    // the threads are already entering when the section pins
-    const weave = f.reduced ? 1 : smooth(-0.35, 0.38, p);
+    // played on a clock by the page (Converge.tsx), not scrubbed by scroll
+    const p = f.reduced ? 1 : f.ext.play ?? CONVERGE_FROM;
+    const weave = f.reduced ? 1 : smooth(CONVERGE_FROM, 0.38, p);
     const net = smooth(0.38, 0.86, p);
     r.clear(COLORS.warp);
 

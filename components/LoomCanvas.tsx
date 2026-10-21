@@ -13,11 +13,9 @@ type Props = {
   className?: string;
   /** Mutable values the parent shares with the scene (hover index, layout). */
   ext?: React.RefObject<Record<string, number>>;
-  /** Pin the enclosing section and scrub progress through it. */
-  pin?: boolean;
 };
 
-export default function LoomCanvas({ scene, className, ext, pin }: Props) {
+export default function LoomCanvas({ scene, className, ext }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -82,25 +80,12 @@ export default function LoomCanvas({ scene, className, ext, pin }: Props) {
     box.addEventListener("pointermove", onMove, { passive: true });
     box.addEventListener("pointerleave", onLeave);
 
-    // short screens (phones in landscape) can't hold a pinned stage, so it scrolls normally
-    const short = window.innerHeight < 560;
-    const trigger = ScrollTrigger.create(
-      pin && !reduced && !short
-        ? {
-            trigger: section,
-            start: "top top",
-            end: () => "+=" + window.innerHeight * (mobileQuery.matches ? 0.9 : 1.4),
-            pin: true,
-            scrub: true,
-            onUpdate: (s) => { frame.progress = s.progress; },
-          }
-        : {
-            trigger: section,
-            start: "top bottom",
-            end: "bottom top",
-            onUpdate: (s) => { frame.progress = s.progress; },
-          },
-    );
+    const trigger = ScrollTrigger.create({
+      trigger: section,
+      start: "top bottom",
+      end: "bottom top",
+      onUpdate: (s) => { frame.progress = s.progress; },
+    });
 
     return () => {
       cancelAnimationFrame(raf);
@@ -111,7 +96,7 @@ export default function LoomCanvas({ scene, className, ext, pin }: Props) {
       box.removeEventListener("pointerleave", onLeave);
       renderer.dispose();
     };
-  }, [scene, ext, pin]);
+  }, [scene, ext]);
 
   return <canvas ref={ref} className={className} aria-hidden="true" />;
 }
