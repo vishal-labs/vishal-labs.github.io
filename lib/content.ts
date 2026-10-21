@@ -66,16 +66,14 @@ export const HOME = {
     "Privacy is the point. Nothing reaches them except through a Cloudflare Tunnel, so not one port is open at home, and the most personal parts, like my assistant's memory, never leave the network. It's also where I break things before anyone pays me to fix them.",
   ],
   bridge: { before: "Running it every day taught me my trade: ", link: "keeping things up", to: "#reliability", tone: "sre", after: "." } as Bridge,
-  stageNote: "Every cube is a VM I run, circling me, its only client. Each time one comes round, it shows another service it hosts.",
-  // each orbiting VM and the services it cycles through as it passes behind me
-  orbit: [
-    { vm: "selfhosted-trixie", services: ["immich", "vaultwarden", "seafile", "jellyfin"] },
-    { vm: "hermes", services: ["hermes agent", "honcho"] },
-    { vm: "selfhosted-trixie", services: ["silverbullet", "karakeep", "tt-rss", "navidrome"] },
-    { vm: "monitoring", services: ["prometheus", "loki"] },
-    { vm: "built by me", services: ["calorie-vision", "splitwise"] },
-    { vm: "krishna-cp", services: ["kubernetes", "grafana"] },
-  ],
+  stageNote: "Three rings of services I self-host, circling me, their only client: my data, my AI, and the infrastructure that keeps both up. When they spin up, each one closes into a whole circle.",
+  // the three rings, inner to outer; each cube on a ring is one service. tone picks the weft:
+  // sre green and ai pink keep their meaning, and data is plain bone (no domain of its own)
+  rings: [
+    { id: "infra", name: "infrastructure", tone: "sre", services: ["kubernetes", "prometheus", "loki", "grafana"] },
+    { id: "ai", name: "AI & agents", tone: "ai", services: ["hermes agent", "honcho", "ollama", "silverbullet", "calorie-vision"] },
+    { id: "data", name: "my data", tone: "bone", services: ["immich", "vaultwarden", "seafile", "jellyfin", "navidrome", "karakeep", "tt-rss", "splitwise"] },
+  ] as { id: string; name: string; tone: "sre" | "ai" | "bone"; services: string[] }[],
 };
 
 export type LedgerItem = {

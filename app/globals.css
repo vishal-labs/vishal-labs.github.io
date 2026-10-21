@@ -250,11 +250,19 @@ em { font-style: normal; font-weight: 600; }
 .stage-home .stage-box { height: min(66svh, 600px); }
 .orbit-chips li {
   position: absolute; left: 0; top: 0; will-change: transform; opacity: 0;
-  padding: 5px 10px; background: var(--warp-deep); border: 1px solid var(--sre); white-space: nowrap;
-  font-family: var(--font-mono), monospace; line-height: 1.25; transform-origin: 50% 100%;
+  padding: 5px 10px; background: var(--warp-deep); border: 1px solid var(--thread-hi); white-space: nowrap;
+  font: 0.8125rem/1.25 var(--font-mono), monospace; color: var(--bone); transform-origin: 50% 100%;
+  transition: opacity 0.2s linear;
 }
-.orbit-chips .svc { display: block; font-size: 0.8125rem; color: var(--bone); }
-.orbit-chips .vm { display: block; font-size: 0.75rem; color: var(--mute); }
+.orbit-chips .ring-sre { border-color: var(--sre); }
+.orbit-chips .ring-ai { border-color: var(--ai); }
+.orbit-chips .ring-bone { border-color: var(--mute); }
+/* the key under the stage: one entry per ring, the one being named lights up */
+.orbit-rings { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 14px 0 0; padding: 0; list-style: none; font: 0.8125rem/1.3 var(--font-mono), monospace; }
+.orbit-rings li { display: inline-flex; align-items: center; gap: 8px; opacity: 0.6; transition: opacity 0.3s linear; }
+.orbit-rings li[data-on="1"] { opacity: 1; }
+.orbit-rings .swatch { width: 14px; height: 4px; background: currentColor; }
+.t-bone { color: var(--bone); }
 .orbit-me {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20;
   padding: 10px 16px; background: var(--warp-deep); border: 2px solid var(--ai);
@@ -450,9 +458,7 @@ em { font-style: normal; font-weight: 600; }
   .copy h2, .path h2, .close h2 { margin-bottom: 20px; }
   .stage-box { height: 68svh; }
   .stage-home .stage-box { height: 56svh; }
-  .orbit-chips li { padding: 4px 7px; }
-  .orbit-chips .svc { font-size: 0.75rem; }
-  .orbit-chips .vm { display: none; }
+  .orbit-chips li { padding: 4px 7px; font-size: 0.75rem; }
   .stage-sonar .stage-box { height: 62svh; }
   .stage-packets .stage-box { height: 72svh; }
   .stage-agents .stage-box { height: 64svh; }

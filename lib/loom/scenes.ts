@@ -137,28 +137,79 @@ function drawRow(r: Renderer, g: number, y: number, rowH: number, cols: number, 
   }
 }
 
-// ───────────────────────── home: my VMs orbiting me ─────────────────────────
-// A tilted ring in 3D: each VM is a woven cube circling me, its only client. Front cubes are
-// larger and brighter; each time a cube passes behind me it shows the next service it hosts.
-const ORBIT_MS = 20000;
+// ───────────────────────── home: three rings of services orbiting me ─────────────────────────
+// Three concentric rings in 3D, each tilted its own way: infrastructure inside, AI in the
+// middle, my data outside. Every cube is one service. On a loop the rings spin up until the
+// cubes smear into whole woven circles, hold, then slow back down so the names can be read.
+const SPIN_P = 15500; // one cycle, ms
+const SPIN_MAX = 18; // top speed, as a multiple of the resting speed
+// speed multiplier through the cycle: rest, spin up, hold, spin down
+function spinRate(u: number) {
+  if (u < 5000) return 1;
+  if (u < 9000) { const k = (u - 5000) / 4000; return 1 + (SPIN_MAX - 1) * k * k * k; }
+  if (u < 12000) return SPIN_MAX;
+  const k = (u - 12000) / 3500;
+  return 1 + (SPIN_MAX - 1) * (1 - k) ** 3;
+}
+// the angle has to be a pure function of time (the canvas and the DOM chips both ask for it),
+// so the speed curve is integrated once into a table
+const SPIN_STEP = 10;
+const SPIN_TABLE = (() => {
+  const n = SPIN_P / SPIN_STEP;
+  const out = new Float64Array(n + 1);
+  for (let i = 1; i <= n; i++) out[i] = out[i - 1] + spinRate((i - 0.5) * SPIN_STEP) * SPIN_STEP;
+  return out;
+})();
+function spunFor(t: number) {
+  const laps = Math.floor(t / SPIN_P), u = t - laps * SPIN_P;
+  const i = Math.floor(u / SPIN_STEP), k = (u - i * SPIN_STEP) / SPIN_STEP;
+  return laps * SPIN_TABLE[SPIN_TABLE.length - 1] + lerp(SPIN_TABLE[i], SPIN_TABLE[i + 1], k);
+}
+// radius (of the stage's ring size), tilt toward the viewer, roll on screen, resting lap time
+// (negative spins the other way): concentric, but each at its own angle
+const RINGS = [
+  { r: 0.44, pitch: 0.86, roll: 0.5, lap: 15000, tallR: 0.56, tallPitch: 0.62, tallRoll: 0.8 },
+  { r: 0.72, pitch: 0.5, roll: -0.42, lap: -21000, tallR: 0.8, tallPitch: 0.72, tallRoll: -0.62 },
+  { r: 1, pitch: 0.62, roll: 0.06, lap: 28000, tallR: 1, tallPitch: 0.86, tallRoll: 0.08 },
+];
 
 export function homeOrbit(t: number, w: number, h: number, reduced: boolean) {
   const tall = w < 560 && h > w * 0.9;
   const cx = w / 2, cy = h * 0.5;
-  const rx = tall ? w * 0.38 : Math.min(w * 0.42, h * 0.7);
-  const ry = rx * (tall ? 0.78 : 0.44);
-  const n = HOME.orbit.length;
-  const spin = reduced ? 0 : (t / ORBIT_MS) * Math.PI * 2;
-  const items = HOME.orbit.map((o, i) => {
-    const th = spin + (i / n) * Math.PI * 2;
-    const z = Math.sin(th); // +1 nearest (lower on screen), -1 furthest
-    const scale = 0.6 + 0.4 * ((z + 1) / 2);
-    // the label advances each time the cube crosses the far point of the ring
-    const laps = Math.floor((th + Math.PI / 2) / (Math.PI * 2));
-    const label = o.services[((laps % o.services.length) + o.services.length) % o.services.length];
-    return { i, x: cx + Math.cos(th) * rx, y: cy + z * ry, z, scale, th, label, vm: o.vm };
+  const R = tall ? Math.min(w * 0.44, h * 0.42) : Math.min(w * 0.43, h * 0.78);
+  const u = reduced ? 0 : t - Math.floor(t / SPIN_P) * SPIN_P;
+  const rate = reduced ? 1 : spinRate(u);
+  const spun = reduced ? 0 : spunFor(t);
+  const blur = clamp((rate - 1.6) / (SPIN_MAX * 0.85 - 1.6)); // 0 crisp cubes .. 1 whole circles
+  // names come in after each lap begins and fade as soon as the spin picks up; they stay
+  // away through the spin-down, so one ring's names never meet the next ring's
+  const names = reduced ? 1 : u >= 9000 ? 0 : clamp((u - 300) / 500) * (1 - clamp((rate - 1) / 1.4));
+  // which ring is named this lap; they take turns so labels never crowd each other
+  const named = reduced ? 2 : Math.floor(t / SPIN_P) % 3;
+  const rings = HOME.rings.map((ring, ri) => {
+    const g = RINGS[ri];
+    const pitch = tall ? g.tallPitch : g.pitch, roll = tall ? g.tallRoll : g.roll;
+    const sp = Math.sin(pitch), cpi = Math.cos(pitch), sr = Math.sin(roll), cr = Math.cos(roll);
+    const rr = tall ? g.tallR : g.r;
+    const rad = R * rr;
+    // a point on the ring at angle th: x right, y down the screen, z toward the viewer
+    const at = (th: number) => {
+      const X = Math.cos(th) * rad, Y = -Math.sin(th) * rad * sp, Z = Math.sin(th) * rad * cpi;
+      return { x: cx + X * cr - Y * sr, y: cy - (X * sr + Y * cr), z: Z / R };
+    };
+    const turn = (spun / g.lap) * Math.PI * 2;
+    return { ...ring, ri, rr, at, turn, dir: Math.sign(g.lap), gap: (Math.PI * 2) / ring.services.length };
   });
-  return { cx, cy, rx, ry, tall, cube: tall ? 30 : 54, items };
+  let i = 0;
+  const items = rings.flatMap((ring) =>
+    ring.services.map((label, k) => {
+      const th = ring.turn + (k + (ring.ri % 2) * 0.5) * ring.gap;
+      const p = ring.at(th);
+      const depth = (p.z / ring.rr + 1) / 2;
+      return { i: i++, ring: ring.ri, label, th, ...p, depth, scale: 0.62 + 0.38 * depth };
+    }),
+  );
+  return { cx, cy, tall, rings, items, blur, names, named, cube: tall ? 20 : 34 };
 }
 
 // a cube's face, filled with weft so it reads as cloth
@@ -173,7 +224,7 @@ function wovenFace(r: Renderer, p: { x: number; y: number }[], c: RGBA) {
   }
 }
 
-function drawCube(r: Renderer, x: number, y: number, size: number, yaw: number, alpha: number) {
+function drawCube(r: Renderer, x: number, y: number, size: number, yaw: number, alpha: number, c: RGBA) {
   const pitch = 0.5;
   const hs = size / 2;
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -200,7 +251,7 @@ function drawCube(r: Renderer, x: number, y: number, size: number, yaw: number, 
   for (const f of faces) {
     if (toward(...f.n) <= 0) continue;
     const pts = f.idx.map((k) => v[k]);
-    wovenFace(r, pts, withAlpha(scale(COLORS.sre, f.tone), alpha));
+    wovenFace(r, pts, withAlpha(scale(c, f.tone), alpha));
     for (let k = 0; k < 4; k++) {
       const a = pts[k], b = pts[(k + 1) % 4];
       r.line(a.x, a.y, b.x, b.y, 1, withAlpha(COLORS.bone, 0.45 * alpha));
@@ -209,36 +260,62 @@ function drawCube(r: Renderer, x: number, y: number, size: number, yaw: number, 
 }
 
 function home(): Scene {
+  const RING_TONE: Record<string, RGBA> = { sre: COLORS.sre, ai: COLORS.ai, bone: scale(COLORS.bone, 0.82) };
   return (r, f) => {
-    const { w, h, t } = f;
+    const { w, h } = f;
+    // the page starts the cycle when the stage first comes into view
+    const t = f.t - (f.ext.t0 ?? 0);
     const o = homeOrbit(t, w, h, f.reduced);
+    const { blur } = o;
     r.clear(COLORS.warp);
     // faint warp behind the orbit
     for (let x = 7; x < w; x += 18) r.line(x, 0, x, h, 1, withAlpha(COLORS.thread, 0.8));
-    // the ring itself, woven: over and under
-    const segs = 120;
-    for (let i = 0; i < segs; i++) {
-      if (i % 3 === 2) continue;
-      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 0.7) / segs) * Math.PI * 2;
-      const zz = Math.sin(a0);
-      r.line(o.cx + Math.cos(a0) * o.rx, o.cy + zz * o.ry, o.cx + Math.cos(a1) * o.rx, o.cy + Math.sin(a1) * o.ry, 1.5, withAlpha(COLORS.threadHi, 0.5 + 0.5 * ((zz + 1) / 2)));
+    // each ring itself, woven: over and under
+    for (const ring of o.rings) {
+      const c = RING_TONE[ring.tone];
+      const segs = 96;
+      for (let i = 0; i < segs; i++) {
+        if (i % 3 === 2) continue;
+        const a = ring.at((i / segs) * Math.PI * 2), b = ring.at(((i + 0.7) / segs) * Math.PI * 2);
+        const d = (a.z / ring.rr + 1) / 2;
+        r.line(a.x, a.y, b.x, b.y, 1.5, withAlpha(scale(c, 0.55), 0.35 + 0.45 * d));
+      }
     }
-    // back to front, so near cubes cover far ones
+    // back to front across all three rings, so near cubes cover far ones
     const order = [...o.items].sort((a, b) => a.z - b.z);
     for (const it of order) {
-      const depth = (it.z + 1) / 2;
-      const alpha = 0.45 + 0.55 * depth;
-      // the link to me, and data running both ways on it
-      woven(r, o.cx, o.cy, it.x, it.y, 1.2, withAlpha(COLORS.threadHi, alpha));
-      for (let k = 0; k < 2; k++) {
-        const ph = f.reduced ? 0.35 + 0.3 * k : (t / 1300 + it.i * 0.17 + k * 0.5) % 1;
-        const out = k === 0;
-        const px = out ? lerp(o.cx, it.x, ph) : lerp(it.x, o.cx, ph);
-        const py = out ? lerp(o.cy, it.y, ph) : lerp(it.y, o.cy, ph);
-        const sz = 4 + 3 * depth;
-        r.rect(px, py, sz, sz, withAlpha(out ? COLORS.ai : COLORS.bone, alpha));
+      const ring = o.rings[it.ring];
+      const c = RING_TONE[ring.tone];
+      const alpha = 0.45 + 0.55 * it.depth;
+      const size = o.cube * it.scale;
+      // the link to me, and data running both ways on it; both give way to the spin
+      const calm = 1 - blur;
+      if (calm > 0.02) {
+        woven(r, o.cx, o.cy, it.x, it.y, 1, withAlpha(COLORS.threadHi, alpha * 0.7 * calm));
+        for (let k = 0; k < 2; k++) {
+          const ph = f.reduced ? 0.35 + 0.3 * k : (t / 1300 + it.i * 0.17 + k * 0.5) % 1;
+          const out = k === 0;
+          const px = out ? lerp(o.cx, it.x, ph) : lerp(it.x, o.cx, ph);
+          const py = out ? lerp(o.cy, it.y, ph) : lerp(it.y, o.cy, ph);
+          const sz = 3 + 3 * it.depth;
+          r.rect(px, py, sz, sz, withAlpha(out ? COLORS.ai : COLORS.bone, alpha * calm));
+        }
       }
-      drawCube(r, it.x, it.y, o.cube * it.scale, it.th * 0.8 + 0.6, alpha);
+      // at speed each cube smears back along its ring; at the top they join into one circle
+      if (blur > 0) {
+        const len = ring.gap * Math.min(1.04, blur ** 0.8 * 1.04);
+        const steps = Math.max(2, Math.ceil(len / 0.035));
+        let prev = it;
+        for (let j = 1; j <= steps; j++) {
+          const q = ring.at(it.th - ring.dir * (len * j) / steps);
+          const fade = lerp(1 - j / steps, 1, blur * blur);
+          const tone = j % 2 ? 1 : 0.7; // over, under: the circle stays cloth
+          const d = (q.z / ring.rr + 1) / 2;
+          r.line(prev.x, prev.y, q.x, q.y, Math.max(2, o.cube * (0.62 + 0.38 * d) * 0.5), withAlpha(scale(c, tone), blur * fade * (0.5 + 0.5 * d)));
+          prev = { ...prev, x: q.x, y: q.y };
+        }
+      }
+      drawCube(r, it.x, it.y, size, it.th * 0.8 + 0.6, alpha * (1 - 0.7 * blur), c);
     }
     r.flush();
   };
