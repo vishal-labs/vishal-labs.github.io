@@ -166,11 +166,16 @@ function spunFor(t: number) {
   return laps * SPIN_TABLE[SPIN_TABLE.length - 1] + lerp(SPIN_TABLE[i], SPIN_TABLE[i + 1], k);
 }
 // radius (of the stage's ring size), tilt toward the viewer, roll on screen, resting lap time
-// (negative spins the other way): concentric, but each at its own angle
+// (negative spins the other way): concentric, but each at its own angle. As the spin builds,
+// each ring swings toward its "spun" tilt, opening into an armillary sphere, and swings back
+// as it settles. The outer ring only flattens: rolling it would push it off the stage.
 const RINGS = [
-  { r: 0.44, pitch: 0.86, roll: 0.5, lap: 15000, tallR: 0.56, tallPitch: 0.62, tallRoll: 0.8 },
-  { r: 0.72, pitch: 0.5, roll: -0.42, lap: -21000, tallR: 0.8, tallPitch: 0.72, tallRoll: -0.62 },
-  { r: 1, pitch: 0.62, roll: 0.06, lap: 28000, tallR: 1, tallPitch: 0.86, tallRoll: 0.08 },
+  { r: 0.44, pitch: 0.86, roll: 0.5, lap: 15000, tallR: 0.56, tallPitch: 0.62, tallRoll: 0.8,
+    spun: { pitch: 0.34, roll: 1.2 }, tallSpun: { pitch: 0.3, roll: 1.25 } },
+  { r: 0.72, pitch: 0.5, roll: -0.42, lap: -21000, tallR: 0.8, tallPitch: 0.72, tallRoll: -0.62,
+    spun: { pitch: 0.3, roll: -0.95 }, tallSpun: { pitch: 0.3, roll: -1.0 } },
+  { r: 1, pitch: 0.62, roll: 0.06, lap: 28000, tallR: 1, tallPitch: 0.86, tallRoll: 0.08,
+    spun: { pitch: 0.3, roll: 0 }, tallSpun: { pitch: 0.45, roll: 0 } },
 ];
 
 export function homeOrbit(t: number, w: number, h: number, reduced: boolean) {
@@ -186,9 +191,15 @@ export function homeOrbit(t: number, w: number, h: number, reduced: boolean) {
   const names = reduced ? 1 : u >= 9000 ? 0 : clamp((u - 300) / 500) * (1 - clamp((rate - 1) / 1.4));
   // which ring is named this lap; they take turns so labels never crowd each other
   const named = reduced ? 2 : Math.floor(t / SPIN_P) % 3;
+  // how far the rings have swung toward their spun tilt; it leads the speed a little, so the
+  // swing is already under way while the cubes are still readable as cubes
+  const sw = Math.sqrt(clamp((rate - 1) / (SPIN_MAX - 1)));
+  const swing = sw * sw * (3 - 2 * sw);
   const rings = HOME.rings.map((ring, ri) => {
     const g = RINGS[ri];
-    const pitch = tall ? g.tallPitch : g.pitch, roll = tall ? g.tallRoll : g.roll;
+    const to = tall ? g.tallSpun : g.spun;
+    const pitch = lerp(tall ? g.tallPitch : g.pitch, to.pitch, swing);
+    const roll = lerp(tall ? g.tallRoll : g.roll, to.roll, swing);
     const sp = Math.sin(pitch), cpi = Math.cos(pitch), sr = Math.sin(roll), cr = Math.cos(roll);
     const rr = tall ? g.tallR : g.r;
     const rad = R * rr;
