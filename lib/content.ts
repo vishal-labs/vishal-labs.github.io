@@ -349,7 +349,7 @@ export const TIMELINE: { when: string; role: string; where: string; detail: stri
     domain: "ai",
   },
   {
-    when: "2024 – now",
+    when: "2024 – 2026",
     role: "Core committee and student coordinator",
     where: "IEEE-CS · graVITas & Riviera",
     detail: "Hackathons and cryptic hunts, and a fest team of 60 serving 1,000+ attendees.",
