@@ -2,6 +2,7 @@ import Hero from "@/components/Hero";
 import Converge from "@/components/Converge";
 import Agents from "@/components/Agents";
 import ProgressThread from "@/components/ProgressThread";
+import Extras from "@/components/Extras";
 import { Close, DomainSections, Home, Nav, Philosophy, Timeline } from "@/components/Sections";
 
 export default function Page() {
@@ -21,6 +22,7 @@ export default function Page() {
         <Converge />
         <Close />
       </main>
+      <Extras />
     </>
   );
 }

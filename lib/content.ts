@@ -8,6 +8,21 @@ export const LINKS = {
 
 export type Domain = "sre" | "ai" | "web3";
 
+// The page's sections in reading order. Keyboard shortcuts jump between them, and the
+// visitor's keepsake cloth weaves one band per section, in that section's thread.
+export const SECTIONS: { id: string; name: string; tone: "warp" | "zari" | "bone" | Domain | "mute" | "all" }[] = [
+  { id: "top", name: "The loom", tone: "warp" },
+  { id: "philosophy", name: "How I work", tone: "zari" },
+  { id: "home", name: "Woven at home", tone: "bone" },
+  { id: "reliability", name: "Reliability", tone: "sre" },
+  { id: "chains", name: "Chains", tone: "web3" },
+  { id: "agents", name: "Agents", tone: "ai" },
+  { id: "models", name: "Models", tone: "ai" },
+  { id: "path", name: "The cloth so far", tone: "mute" },
+  { id: "converge", name: "SRE × AI × Web3", tone: "all" },
+  { id: "close", name: "Pull a thread", tone: "zari" },
+];
+
 // Warp threads in the hero, tagged at the harness. Host names are fine to show;
 // addresses, domains and port maps never are.
 export const SERVICES: { name: string; role: string; host: string }[] = [

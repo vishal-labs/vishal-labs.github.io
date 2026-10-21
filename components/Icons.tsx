@@ -28,3 +28,13 @@ export function ArrowDown({ className }: P) {
     </svg>
   );
 }
+
+// a speaker; when off, a square-capped cross stands where the sound would be
+export function Speaker({ className, on }: P & { on: boolean }) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M2.5 6v4h3l4 3V3l-4 3z" />
+      {on ? <path d="M12 5.5c1 1.4 1 3.6 0 5" /> : <path d="M11.5 6.5l3 3m0-3-3 3" />}
+    </svg>
+  );
+}

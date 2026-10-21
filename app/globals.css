@@ -14,6 +14,8 @@
   --sre-ink: #3fc7ae;
   --ai-ink: #f47aa9;
   --web3-ink: #f89a4c;
+  /* the résumé's paper and inks: bone on screen, plain white when printed */
+  --paper: #ffffff;
 
   --nav-h: 56px;
   --gutter: clamp(20px, 5vw, 72px);
@@ -94,6 +96,7 @@ em { font-style: normal; font-weight: 600; }
   border-bottom: 1px solid var(--thread);
 }
 .brand {
+  white-space: nowrap; flex: none; padding-block: 8px;
   font-family: var(--font-display), sans-serif; font-weight: 900; font-size: 1.5rem;
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--zari); text-decoration: none;
 }
@@ -103,6 +106,15 @@ em { font-style: normal; font-weight: 600; }
   text-decoration: none; color: var(--bone); padding-block: 12px;
 }
 .nav nav a:hover { color: var(--zari); }
+.nav nav { align-items: center; }
+/* the loom's sound: a quiet square button at the end of the nav */
+.sound-toggle {
+  display: grid; place-items: center; width: 40px; height: 40px; margin-left: -8px;
+  background: none; border: 1px solid transparent; color: var(--mute); cursor: pointer;
+  transition: color 0.2s ease-out, border-color 0.2s ease-out;
+}
+.sound-toggle:hover { color: var(--zari); }
+.sound-toggle[aria-pressed="true"] { color: var(--zari); border-color: var(--thread-hi); }
 
 /* ───────── buttons and links ───────── */
 .btn {
@@ -423,7 +435,45 @@ em { font-style: normal; font-weight: 600; }
 }
 .close-inner h2 { width: auto; margin-left: 0; }
 .close-inner p { font-size: 1.25rem; max-width: 48ch; color: var(--mute); }
+/* the visitor's keepsake: the cloth their reading wove */
+.keepsake { margin: clamp(56px, 9vh, 96px) 0 0; padding-top: 28px; border-top: 1px dashed var(--thread-hi); }
+.close-inner .keepsake p { font-size: 1rem; max-width: 60ch; }
+.keepsake-box { position: relative; height: clamp(160px, 22vw, 240px); margin-top: 20px; border: 1px solid var(--thread); background: var(--warp); }
+.keepsake-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.keepsake figcaption {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 24px; margin-top: 10px;
+  font: 0.8125rem/1.4 var(--font-mono), monospace; color: var(--mute);
+}
+.keepsake figcaption .link { background: none; border: 0; cursor: pointer; font: 500 1rem var(--font-body), sans-serif; }
 .footer { background: var(--warp-deep); }
+/* the hint keeps its line; the credit beside it wraps within itself, next to its mark */
+.keys-hint { margin-left: auto; flex: none; }
+/* keyboard help only means something where there is a keyboard and a pointer */
+@media (hover: none), (pointer: coarse) { .keys-hint { display: none; } }
+kbd {
+  display: inline-block; min-width: 1.6em; padding: 1px 6px; text-align: center;
+  font: 500 0.75rem/1.5 var(--font-mono), monospace; color: var(--bone);
+  background: var(--warp); border: 1px solid var(--thread-hi); border-bottom-width: 2px;
+}
+/* the shortcuts panel: a woven card with a zari edge, over a dimmed page */
+.keys {
+  margin: auto; width: min(560px, calc(100% - 32px)); max-height: calc(100svh - 32px);
+  background: var(--warp-deep); color: var(--bone); border: 1px solid var(--thread-hi);
+}
+.keys::backdrop { background: rgb(15 11 34 / 0.78); }
+.keys-inner { padding: 24px 28px 20px; }
+.keys h2 { font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 900; color: var(--bone); margin-bottom: 16px; }
+.keys dl { display: grid; gap: 10px; }
+.keys dl div { display: grid; grid-template-columns: 5.5em 1fr; align-items: baseline; gap: 12px; }
+.keys dd { color: var(--mute); font-size: 0.9375rem; }
+.keys-sections {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; margin-top: 20px; padding-top: 18px;
+  border-top: 1px dashed var(--thread-hi); font-size: 0.875rem; color: var(--mute);
+}
+.keys-sections li { display: flex; align-items: baseline; gap: 10px; }
+.keys form { margin-top: 18px; display: flex; justify-content: flex-end; }
+.keys form .link { background: none; border: 0; font: inherit; cursor: pointer; gap: 10px; }
+
 
 /* ───────── progress thread ───────── */
 .progress-thread { position: fixed; z-index: 29; opacity: 0; transition: opacity 0.4s ease-out; pointer-events: none; }
@@ -451,6 +501,8 @@ em { font-style: normal; font-weight: 600; }
   :root { --nav-h: 52px; }
   .brand { font-size: 1.25rem; }
   .nav nav a { font-size: 0.8125rem; letter-spacing: 0.06em; }
+  .nav nav { gap: 14px; }
+  .sound-toggle { width: 36px; height: 36px; margin-left: -6px; }
   .harness { height: 112px; }
   .thread-reading { top: 126px; }
   .band-inner, .split { grid-template-columns: 1fr; }
@@ -482,6 +534,13 @@ em { font-style: normal; font-weight: 600; }
 }
 .net-node.out { font-size: 1.375rem; }
 }
+/* the smallest phones: the brand, three links and the sound toggle still share one line */
+@media (max-width: 380px) {
+  .nav { gap: 12px; }
+  .brand { font-size: 1.125rem; }
+  .nav nav { gap: 6px; }
+  .nav nav a { letter-spacing: 0.03em; padding-inline: 3px; }
+}
 
 /* tablets: bands stack, so the band's headline keeps a full row */
 @media (max-width: 959px) {
@@ -505,4 +564,67 @@ em { font-style: normal; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   .selvedge-fact { animation: none; }
   .weft { transition: none; }
+}
+
+/* ───────── résumé: the same facts as a loom card, ink on bone ───────── */
+.resume { min-height: 100svh; padding: 0 var(--gutter) 64px; background: var(--warp); }
+.resume-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  max-width: 860px; margin: 0 auto; padding: 20px 0;
+}
+.resume-bar .link { text-decoration: none; }
+.sheet {
+  --ink: #16112e; --ink-soft: #4a4266; --rule: #c9bfa8;
+  max-width: 860px; margin: 0 auto; padding: clamp(28px, 6vw, 64px) clamp(20px, 6vw, 64px);
+  background: var(--bone); color: var(--ink); border-top: 6px solid var(--zari);
+}
+.sheet a { color: var(--ink); text-decoration-color: var(--thread-hi); text-underline-offset: 3px; }
+.sheet h1 { font-size: clamp(2.75rem, 13vw, 4rem); font-weight: 900; line-height: 0.95; color: var(--ink); }
+.sheet-role { margin-top: 10px; font: 800 1.25rem/1.2 var(--font-display), sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink); }
+.sheet-line { margin-top: 10px; max-width: 60ch; color: var(--ink-soft); }
+.sheet-contact { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 16px; font: 0.8125rem/1.5 var(--font-mono), monospace; }
+.sheet section { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.sheet h2 { font-size: 1.375rem; font-weight: 900; letter-spacing: 0.06em; margin-bottom: 12px; color: var(--ink); }
+.sheet h3 { font: 600 1.0625rem/1.3 var(--font-body), sans-serif; text-transform: none; color: var(--ink); }
+.sheet p { font-size: 0.9375rem; line-height: 1.5; color: var(--ink-soft); }
+.sheet .where { color: var(--ink); font-size: 0.875rem; }
+.sheet-row { display: grid; grid-template-columns: 7.5rem 1fr; gap: 16px; padding: 10px 0; break-inside: avoid; }
+.sheet-row time { font: 0.8125rem/1.6 var(--font-mono), monospace; color: var(--ink-soft); }
+/* the weft mark: each row and group keeps its domain's thread, as a short pick at the edge */
+.sheet-row > div, .sheet-group { position: relative; padding-left: 14px; }
+.sheet-row > div::before, .sheet-group::before { content: ""; position: absolute; left: 0; top: 0.35em; bottom: 0.35em; width: 3px; background: var(--rule); }
+.d-sre.sheet-row > div::before, .d-sre.sheet-group::before { background: var(--sre); }
+.d-ai.sheet-row > div::before, .d-ai.sheet-group::before { background: var(--ai); }
+.d-web3.sheet-row > div::before, .d-web3.sheet-group::before { background: var(--web3); }
+.sheet-group { margin-top: 18px; }
+.sheet-group .group-name { font: 800 0.9375rem/1.2 var(--font-display), sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
+.sheet-item { margin-top: 10px; break-inside: avoid; }
+.sheet-item h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font: 600 0.9375rem/1.4 var(--font-body), sans-serif; color: var(--ink); }
+.sheet-item h4 a { font: 400 0.75rem/1.4 var(--font-mono), monospace; color: var(--ink-soft); }
+.sheet-tools { font-family: var(--font-mono), monospace; font-size: 0.8125rem !important; }
+@media (max-width: 720px) {
+  .sheet-row { grid-template-columns: 1fr; gap: 4px; }
+}
+@media print {
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  html, body, .resume { background: var(--paper) !important; }
+  .resume { padding: 0; min-height: 0; }
+  .resume-bar { display: none; }
+  .sheet { max-width: none; padding: 0; background: var(--paper); border-top: 0; }
+  .sheet a { text-decoration: none; }
+  .sheet section { margin-top: 18px; padding-top: 10px; }
+  .sheet h2 { break-after: avoid; font-size: 1.125rem; margin-bottom: 6px; }
+  .sheet h1 { font-size: 2.75rem; }
+  .sheet-role { font-size: 1rem; margin-top: 6px; }
+  .sheet-line, .sheet-contact { margin-top: 6px; }
+  .sheet p, .sheet-item h4 { font-size: 0.78rem; line-height: 1.4; }
+  .sheet h3 { font-size: 0.875rem; }
+  .sheet .where { font-size: 0.75rem; }
+  .sheet-row { padding: 5px 0; grid-template-columns: 6rem 1fr; }
+  .sheet-row time { font-size: 0.72rem; }
+  .sheet-group { margin-top: 10px; }
+  .sheet-item { margin-top: 5px; }
+  .sheet-tools { font-size: 0.72rem !important; }
+  .sheet-group .group-name { break-after: avoid; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

@@ -1,5 +1,6 @@
 import { hex, withAlpha, type Renderer, type RGBA } from "./renderer";
 import { HOME, MODEL_QUADRANTS } from "../content";
+import { cue, hum } from "../sound";
 
 // which signature each quadrant re-weaves into follows the content order, not the screen position
 const PATTERN_KIND = { wave: 0, tokens: 1, table: 2, plate: 3 } as const;
@@ -102,6 +103,7 @@ function hero(): Scene {
     // shuttle
     if (shotStart < 0 || t - shotStart > BEAT) {
       if (shotStart >= 0) {
+        cue("clack", shotDir > 0 ? 1 : 0);
         rows.unshift(globalRow++);
         if (rows.length > maxRows) rows.length = maxRows;
       }
@@ -220,7 +222,8 @@ export function homeOrbit(t: number, w: number, h: number, reduced: boolean) {
       return { i: i++, ring: ring.ri, label, th, ...p, depth, scale: 0.62 + 0.38 * depth };
     }),
   );
-  return { cx, cy, tall, rings, items, blur, names, named, cube: tall ? 20 : 34 };
+  const level = clamp((rate - 1) / (SPIN_MAX - 1));
+  return { cx, cy, tall, rings, items, blur, names, named, level, cube: tall ? 20 : 34 };
 }
 
 // a cube's face, filled with weft so it reads as cloth
@@ -278,6 +281,7 @@ function home(): Scene {
     const t = f.t - (f.ext.t0 ?? 0);
     const o = homeOrbit(t, w, h, f.reduced);
     const { blur } = o;
+    hum(o.level);
     r.clear(COLORS.warp);
     // faint warp behind the orbit
     for (let x = 7; x < w; x += 18) r.line(x, 0, x, h, 1, withAlpha(COLORS.thread, 0.8));
@@ -457,7 +461,7 @@ function reliability(): Scene {
   };
 }
 
-function mix(a: number) {
+export function mix(a: number) {
   a = Math.imul(a ^ (a >>> 16), 0x85ebca6b);
   a = Math.imul(a ^ (a >>> 13), 0xc2b2ae35);
   return (a ^ (a >>> 16)) >>> 0;

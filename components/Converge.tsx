@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import LoomCanvas from "./LoomCanvas";
+import { cue } from "@/lib/sound";
 import { CONVERGE_FROM, NET, convergeNodes, toScreen } from "@/lib/loom/scenes";
 
 const TONE = ["t-sre", "t-ai", "t-web3", "t-zari"];
@@ -47,7 +48,7 @@ export default function Converge() {
       // plays once, start to finish; after that only the perpetual pulses run
       const play = () => {
         if (tween) return;
-        tween = gsap.to(clock, { p: 1, duration: 4.2, ease: "none", onUpdate: apply });
+        tween = gsap.to(clock, { p: 1, duration: 4.2, ease: "none", onUpdate: apply, onComplete: () => cue("chime") });
       };
       // landing from above: once the reader stops scrolling, the section settles into the
       // viewport with a slow eased glide, then plays. Any input of theirs cancels the glide.

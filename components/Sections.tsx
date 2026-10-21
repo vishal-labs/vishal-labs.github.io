@@ -4,6 +4,8 @@ import ReliabilitySection from "./ReliabilitySection";
 import Ledger from "./Ledger";
 import { ArrowUpRight } from "./Icons";
 import HomeOrbit from "./HomeOrbit";
+import Keepsake from "./Keepsake";
+import { SoundToggle } from "./Extras";
 import { DOMAINS, HOME, LINKS, PATH, PHILOSOPHY, TIMELINE, type Bridge, type Domain } from "@/lib/content";
 
 export function Nav() {
@@ -14,6 +16,7 @@ export function Nav() {
         <a href="#reliability">Work</a>
         <a href="#path">Path</a>
         <a href="#close">Contact</a>
+        <SoundToggle />
       </nav>
     </header>
   );
@@ -147,12 +150,15 @@ export function Close() {
             Message me on LinkedIn <ArrowUpRight />
           </a>
           <a className="link" href={LINKS.hashnode} target="_blank" rel="noreferrer">Read my blog on Hashnode <ArrowUpRight /></a>
+          <a className="link" href="/resume/">Printable résumé <ArrowUpRight /></a>
         </div>
+        <Keepsake />
       </div>
       <footer className="footer zari">
         <div className="selvedge">
           <span className="selvedge-mark" aria-hidden="true" />
           <span>Woven and self-hosted at home · © {new Date().getFullYear()} Vishal Dodda</span>
+          <span className="keys-hint">Press <kbd>?</kbd> for keyboard shortcuts</span>
         </div>
       </footer>
     </section>
