@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import LoomCanvas from "./LoomCanvas";
 import Ledger from "./Ledger";
-import { packetGeometry } from "@/lib/loom/scenes";
+import { XDP_RULES, packetGeometry } from "@/lib/loom/scenes";
 import { RELIABILITY_ZONES, type DOMAINS } from "@/lib/content";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
@@ -16,6 +16,9 @@ export default function ReliabilitySection({ d }: { d: (typeof DOMAINS)[number] 
   const [hover, setHover] = useState(-1);
   const [pinned, setPinned] = useState(-1);
   const [counts, setCounts] = useState({ screened: 0, dropped: 0, upward: 0 });
+  // which pattern tabs just caught something, and whether prometheus is alerting
+  const [hits, setHits] = useState<boolean[]>([false, false, false, false]);
+  const [alert, setAlert] = useState(false);
   const active = hover >= 0 ? hover : pinned;
   ext.current.zone = active;
 
@@ -24,11 +27,16 @@ export default function ReliabilitySection({ d }: { d: (typeof DOMAINS)[number] 
     if (!el) return;
     const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
     ro.observe(el);
-    // the counters print themselves a few times a second, in place
+    // the counters print themselves a few times a second, in place; the tabs and the alert
+    // follow the scene's own clock
     const id = setInterval(() => {
       const e = ext.current;
-      setCounts({ screened: e.screened ?? 0, dropped: e.dropped ?? 0, upward: e.upward ?? 0 });
-    }, 250);
+      setCounts((c) => (c.screened === e.screened && c.dropped === e.dropped && c.upward === e.upward ? c : { screened: e.screened ?? 0, dropped: e.dropped ?? 0, upward: e.upward ?? 0 }));
+      const now = e.clock ?? 0;
+      const next = XDP_RULES.map((_, i) => now - (e[`hit${i}`] ?? -1e9) < 650);
+      setHits((h) => (h.every((v, i) => v === next[i]) ? h : next));
+      setAlert(!!e.alert);
+    }, 120);
     return () => { ro.disconnect(); clearInterval(id); };
   }, []);
 
@@ -65,21 +73,29 @@ export default function ReliabilitySection({ d }: { d: (typeof DOMAINS)[number] 
             <LoomCanvas scene="reliability" className="stage-canvas" ext={ext} />
             {geo && (
               <>
-                <span className="path-label" style={at(0.06, geo.vertical ? 0.5 : 0.36)}>internet</span>
-                <span className="path-label" style={at(0.2, geo.vertical ? 0.12 : 0.2)}>NIC</span>
-                <span className="path-label drop" style={at(geo.vertical ? 0.36 : 0.31, geo.vertical ? 0.86 : 0.9)}>dropped<span className="long"> in kernel</span></span>
+                <span className="path-label" style={at(...geo.L.labels.internet)}>internet</span>
+                <span className="path-label" style={at(...geo.L.labels.nic)}>NIC</span>
+                <span className="path-label drop" style={at(...geo.L.labels.drop)}>dropped<span className="long"> in kernel</span></span>
+                {/* the four patterns XDP screens for; the one that catches an attack lights */}
+                <ul className="xdp-rules" style={pctRect(geo.rules)} aria-label="Patterns screened in the kernel">
+                  {XDP_RULES.map((rule, i) => (
+                    <li key={rule} data-hit={hits[i] || undefined}>{rule}</li>
+                  ))}
+                </ul>
                 {RELIABILITY_ZONES.map((z, i) => (
-                  <div key={z.id} className="zone" style={pctRect(geo.zones[z.id])} onMouseEnter={() => setHover(i)}>
+                  <div key={z.id} className="zone" style={pctRect(geo.zones[z.id as "xdp" | "ml" | "tls" | "metrics"])} onMouseEnter={() => setHover(i)}>
                     <button
                       type="button"
                       className={`zone-chip z-${z.id}`}
                       aria-pressed={pinned === i}
                       data-active={active === i || undefined}
+                      data-alert={(z.id === "metrics" && alert) || undefined}
                       onFocus={() => setHover(i)}
                       onBlur={() => setHover(-1)}
                       onClick={() => setPinned((p) => (p === i ? -1 : i))}
                     >
                       {z.title}
+                      {z.id === "metrics" && alert && <span className="alert"> · alert</span>}
                     </button>
                   </div>
                 ))}
@@ -87,9 +103,9 @@ export default function ReliabilitySection({ d }: { d: (typeof DOMAINS)[number] 
             )}
           </div>
           <p className="packet-counters" aria-label="Synthetic traffic counters">
-            <span><strong>{fmt(counts.screened)}</strong> screened</span>
-            <span><strong>{fmt(counts.dropped)}</strong> dropped in kernel</span>
-            <span><strong>{fmt(counts.upward)}</strong> sent up to userspace</span>
+            <span><i className="sw sw-seen" aria-hidden="true" /><strong>{fmt(counts.screened)}</strong> screened</span>
+            <span><i className="sw sw-drop" aria-hidden="true" /><strong>{fmt(counts.dropped)}</strong> dropped in kernel</span>
+            <span><i className="sw sw-up" aria-hidden="true" /><strong>{fmt(counts.upward)}</strong> sent up to userspace</span>
           </p>
           <figcaption>{d.stageNote}</figcaption>
         </figure>

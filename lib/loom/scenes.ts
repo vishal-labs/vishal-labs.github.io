@@ -34,6 +34,7 @@ export type SceneName = "hero" | "home" | "reliability" | "models" | "chains" | 
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const lerpColor = (a: RGBA, b: RGBA, t: number): RGBA => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t), lerp(a[3], b[3], t)];
 const expoOut = (t: number) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
 const smooth = (a: number, b: number, v: number) => {
   const t = clamp((v - a) / (b - a));
@@ -340,123 +341,346 @@ function home(): Scene {
 // Traffic hits the network card; the XDP program in the kernel drops attacks in place,
 // a sliver goes up to the userspace ML ensemble, clean requests reach the app, and every
 // drop becomes a metric. Laid out along the flow, so phones can turn it vertical.
-export const PACKET_ZONES: Record<string, [number, number, number, number]> = {
-  // along0, along1, across0, across1, as fractions of the stage
-  xdp: [0.22, 0.4, 0.3, 0.72],
-  ml: [0.5, 0.72, 0.07, 0.23],
-  tls: [0.82, 0.97, 0.4, 0.62],
-  metrics: [0.5, 0.72, 0.78, 0.93],
+// Where everything sits, as (along, across) fractions of the stage, per orientation.
+// Zones are [along0, along1, across0, across1]. Phones run the same path top to bottom.
+type Span = [number, number, number, number];
+const PACKET_LAYOUT: Record<"h" | "v", {
+  lanes: number[]; reed: number; check: number; branch: number; end: number;
+  zones: Record<"xdp" | "bin" | "ml" | "metrics" | "tls", Span>; rules: Span;
+  labels: Record<"internet" | "nic" | "drop", [number, number]>;
+}> = {
+  h: {
+    lanes: [0.43, 0.47, 0.51, 0.55, 0.59], reed: 0.15, check: 0.31, branch: 0.46, end: 0.805,
+    zones: { xdp: [0.19, 0.44, 0.32, 0.67], bin: [0.215, 0.415, 0.75, 0.9], ml: [0.52, 0.72, 0.11, 0.3], metrics: [0.52, 0.72, 0.73, 0.91], tls: [0.8, 0.97, 0.37, 0.65] },
+    rules: [0.19, 0.44, 0.325, 0.405],
+    labels: { internet: [0.06, 0.37], nic: [0.145, 0.67], drop: [0.315, 0.955] },
+  },
+  v: {
+    lanes: [0.4, 0.45, 0.5, 0.55, 0.6], reed: 0.1, check: 0.3, branch: 0.475, end: 0.805,
+    zones: { xdp: [0.2, 0.38, 0.14, 0.86], bin: [0.395, 0.45, 0.64, 0.96], ml: [0.535, 0.69, 0.04, 0.36], metrics: [0.535, 0.65, 0.64, 0.96], tls: [0.8, 0.97, 0.25, 0.75] },
+    rules: [0.215, 0.365, 0.15, 0.36],
+    labels: { internet: [0.035, 0.5], nic: [0.1, 0.76], drop: [0.485, 0.8] },
+  },
 };
+// the four patterns the XDP program screens for, in the order the tabs show them
+export const XDP_RULES = ["xss", "sqli", "../", "ssi"];
 
 export function packetGeometry(w: number, h: number) {
   const vertical = w < 560 && h > w * 0.9;
+  const L = PACKET_LAYOUT[vertical ? "v" : "h"];
   const map = (a: number, b: number) => (vertical ? { x: b * w, y: a * h } : { x: a * w, y: b * h });
-  const zones = Object.fromEntries(
-    Object.entries(PACKET_ZONES).map(([id, [a0, a1, b0, b1]]) => {
-      const p0 = map(a0, b0), p1 = map(a1, b1);
-      return [id, { x: Math.min(p0.x, p1.x), y: Math.min(p0.y, p1.y), w: Math.abs(p1.x - p0.x), h: Math.abs(p1.y - p0.y) }];
-    }),
-  );
-  return { vertical, map, zones };
+  const rect = ([a0, a1, b0, b1]: Span) => {
+    const p0 = map(a0, b0), p1 = map(a1, b1);
+    return { x: Math.min(p0.x, p1.x), y: Math.min(p0.y, p1.y), w: Math.abs(p1.x - p0.x), h: Math.abs(p1.y - p0.y) };
+  };
+  const zones = Object.fromEntries(Object.entries(L.zones).map(([id, z]) => [id, rect(z)])) as Record<keyof typeof L.zones, ReturnType<typeof rect>>;
+  // pixels per unit of each axis, so sizes can be given in pixels along and across the flow
+  const pxA = vertical ? h : w, pxB = vertical ? w : h;
+  return { vertical, map, zones, rules: rect(L.rules), L, pxA, pxB };
 }
 
 function reliability(): Scene {
-  type Pkt = { a: number; b: number; kind: 0 | 1 | 2; state: "fly" | "drop" | "up"; t: number; vy: number };
-  type Dot = { t0: number; from: { a: number; b: number } };
+  // a seeded generator, so the reduced-motion frame is the same every time
+  let seed = 0x9e3779b9;
+  const rnd = () => ((seed = mix(seed + 0x6d2b79f5)) / 4294967296);
+  type Pkt = { lane: number; a: number; v: number; kind: 0 | 1 | 2; rule: number; seen: boolean; state: "fly" | "caught" | "chute" | "up"; t: number; slot: number };
   let pkts: Pkt[] = [];
-  let dots: Dot[] = [];
-  let clock = 0, last = 0, next = 0;
+  const binPicks: number[] = []; // bin slot index of every drop that has landed, newest last
+  let landed = 0, aimed = 0;
+  const dots: { t0: number; slot: number }[] = [];
+  const cloth: { lane: number; t0: number; n: number }[] = []; // the app's cloth, one pick per clean request
+  let picked = 0;
+  const flash = [0, 0, 0, 0, 0].map(() => -1e9);
+  const hook = [0, 0, 0, 0, 0].map(() => -1e9);
+  let mlAt = -1e9, mlConf = 0.8, mlLeaf = 0;
+  // drops per window, newest last: the prometheus panel draws these as its bars
+  const WIN = 700, COLS = 14, CLOTH_MS = 4200;
+  const bars: number[] = Array(COLS).fill(0);
+  let winAt = 0, alertUntil = -1, burstAt = 3000;
+  let clock = 0, last = 0, next = 0, warmed = false, frozen = false;
+
+  // one step of the simulation; the drawing below only reads its state
+  const step = (dt: number, L: (typeof PACKET_LAYOUT)["h"], binCap: number, ext: Record<string, number>) => {
+    clock += dt;
+    // an attack burst every nine seconds, so the bin fills, the chart spikes and the alert fires
+    if (clock >= burstAt + 1500) burstAt += 9000;
+    const burst = clock >= burstAt && clock < burstAt + 1500;
+    while (clock >= next) {
+      const roll = rnd();
+      const kind: 0 | 1 | 2 = roll < (burst ? 0.62 : 0.1) ? 1 : roll < (burst ? 0.64 : 0.13) ? 2 : 0;
+      // a lane is free once its last packet has moved on
+      const free = L.lanes.map((_, i) => i).filter((i) => !pkts.some((p) => p.lane === i && p.state === "fly" && p.a < 0.075));
+      if (free.length) {
+        const lane = free[Math.floor(rnd() * free.length)];
+        pkts.push({ lane, a: 0.005, v: 0.000244 * (0.92 + rnd() * 0.16), kind, rule: Math.floor(rnd() * 4), seen: false, state: "fly", t: clock, slot: 0 });
+      }
+      next += (burst ? 34 : 62) + rnd() * (burst ? 26 : 46);
+    }
+    if (clock - winAt >= WIN) {
+      winAt = clock; bars.shift(); bars.push(0);
+      if (bars[COLS - 1 - 1] + bars[COLS - 1 - 2] >= 7) alertUntil = clock + 1800;
+    }
+    ext.alert = clock < alertUntil ? 1 : 0;
+    ext.clock = clock;
+    pkts = pkts.filter((p) => {
+      if (p.state === "fly") {
+        const before = p.a;
+        p.a += p.v * dt;
+        if (!p.seen && p.a >= L.check) {
+          p.seen = true;
+          flash[p.lane] = clock;
+          ext.screened = (ext.screened ?? 0) + 1;
+          if (p.kind === 1) {
+            p.state = "caught"; p.t = clock; p.a = L.check;
+            ext.dropped = (ext.dropped ?? 0) + 1;
+            ext[`hit${p.rule}`] = clock;
+          }
+        }
+        if (p.kind === 2 && before < L.branch && p.a >= L.branch) { p.state = "up"; p.t = clock; }
+        if (p.state === "fly" && p.a >= L.end) {
+          hook[p.lane] = clock;
+          cloth.push({ lane: p.lane, t0: clock, n: picked++ });
+          return false;
+        }
+      } else if (p.state === "caught" && clock - p.t > 150) {
+        p.state = "chute"; p.t = clock; p.slot = aimed++ % binCap;
+      } else if (p.state === "chute" && clock - p.t > 520) {
+        binPicks.push(p.slot); landed++;
+        if (binPicks.length > binCap) binPicks.shift();
+        dots.push({ t0: clock, slot: p.slot });
+        return false;
+      } else if (p.state === "up" && clock - p.t > 900) {
+        ext.upward = (ext.upward ?? 0) + 1;
+        mlAt = clock; mlConf = 0.72 + rnd() * 0.24; mlLeaf = Math.floor(rnd() * 4);
+        return false;
+      }
+      return true;
+    });
+    for (let i = dots.length - 1; i >= 0; i--) if (clock - dots[i].t0 > 800) { dots.splice(i, 1); bars[COLS - 1]++; }
+    for (let i = cloth.length - 1; i >= 0; i--) if (clock - cloth[i].t0 > CLOTH_MS) cloth.splice(i, 1);
+  };
+
   return (r, f) => {
     const { w, h, t } = f;
     const g = packetGeometry(w, h);
+    const { L, zones: Z } = g;
+    const ext = f.ext;
     const P = g.map;
+    // a rect given in pixels along and across the flow
+    const R = (a: number, b: number, along: number, across: number, c: RGBA, rot = 0) => {
+      const q = P(a, b);
+      if (g.vertical) r.rect(q.x, q.y, across, along, c, rot); else r.rect(q.x, q.y, along, across, c, rot);
+    };
+    const seg = (a0: number, b0: number, a1: number, b1: number, width: number, c: RGBA) => {
+      const p = P(a0, b0), q = P(a1, b1); r.line(p.x, p.y, q.x, q.y, width, c);
+    };
+    const span = (id: keyof typeof Z) => L.zones[id];
+    const bin = span("bin");
+    const cw = 11 / g.pxA, rh = 6 / g.pxB;
+    const binCols = Math.max(1, Math.floor((bin[1] - bin[0]) / cw));
+    const binRows = Math.max(1, Math.floor((bin[3] - bin[2] - 6 / g.pxB) / rh));
+    const binCap = binCols * binRows;
+    const slotAt = (i: number) => ({
+      a: bin[0] + ((i % binCols) + 0.5) * ((bin[1] - bin[0]) / binCols),
+      b: bin[3] - 3 / g.pxB - (Math.floor(i / binCols) + 0.5) * rh,
+    });
+
+    // the first frame starts mid-stream, so the cloth, the bin and the chart already hold something
+    if (!warmed) {
+      warmed = true;
+      const scratch: Record<string, number> = {};
+      for (let k = 0; k < 520; k++) step(16, L, binCap, scratch);
+      // the reader arrives to calm traffic; the first burst comes a moment later
+      alertUntil = -1; burstAt = clock + 2500;
+      ext.screened = 0; ext.dropped = 0; ext.upward = 0;
+      if (f.reduced) { frozen = true; ext.screened = 12840; ext.dropped = 2310; ext.upward = 32; }
+    }
     const dt = last ? Math.min(64, t - last) : 16;
     last = t;
-    clock += f.reduced ? 0 : dt;
-    const ext = f.ext;
+    if (!frozen) step(dt, L, binCap, ext);
+    const now = clock;
+    const since = (x: number, tau: number) => Math.exp(-Math.max(0, now - x) / tau);
+
     r.clear(COLORS.warp);
+    // faint warp across the flow, the ground every stage shares
+    const across = g.vertical ? h : w;
+    for (let k = 9; k < across; k += 18) {
+      if (g.vertical) r.line(0, k, w, k, 1, withAlpha(COLORS.thread, 0.55));
+      else r.line(k, 0, k, h, 1, withAlpha(COLORS.thread, 0.55));
+    }
 
-    const box = (id: string, fill: RGBA, edge: RGBA, picks: number) => {
-      const z = g.zones[id];
-      for (let k = 0; k < picks; k++) {
-        const v = (k + 0.5) / picks;
-        if (g.vertical) r.line(z.x + v * z.w, z.y, z.x + v * z.w, z.y + z.h, Math.max(1, (z.w / picks) * 0.45), fill);
-        else r.line(z.x, z.y + v * z.h, z.x + z.w, z.y + v * z.h, Math.max(1, (z.h / picks) * 0.45), fill);
-      }
-      r.line(z.x, z.y, z.x + z.w, z.y, 1.5, edge); r.line(z.x, z.y + z.h, z.x + z.w, z.y + z.h, 1.5, edge);
-      r.line(z.x, z.y, z.x, z.y + z.h, 1.5, edge); r.line(z.x + z.w, z.y, z.x + z.w, z.y + z.h, 1.5, edge);
+    // ── lanes: five warp threads the traffic rides ──
+    L.lanes.forEach((b) => seg(0.0, b, L.end, b, 1, withAlpha(COLORS.threadHi, 0.75)));
+    // the branch up to userspace and the metric thread down to prometheus, woven
+    const ml = span("ml"), met = span("metrics"), xdp = span("xdp"), tls = span("tls");
+    const mid = L.lanes[2];
+    const curve = (a0: number, b0: number, a1: number, b1: number, k: number) => {
+      // a soft S between two points, eased across the flow
+      const e = k * k * (3 - 2 * k);
+      return { a: lerp(a0, a1, k), b: lerp(b0, b1, e) };
     };
-    // the path: internet → NIC → kernel → app, with a branch up to userspace and one down to metrics
-    const lane = (a0: number, b0: number, a1: number, b1: number, c: RGBA) => { const p = P(a0, b0), q = P(a1, b1); woven(r, p.x, p.y, q.x, q.y, 1.4, c); };
-    lane(0.04, 0.51, 0.82, 0.51, COLORS.threadHi);
-    lane(0.46, 0.51, 0.61, 0.23, withAlpha(COLORS.threadHi, 0.8));
-    lane(0.31, 0.72, 0.61, 0.78, withAlpha(COLORS.threadHi, 0.8));
-    const nic0 = P(0.2, 0.26), nic1 = P(0.2, 0.76);
-    r.line(nic0.x, nic0.y, nic1.x, nic1.y, 4, COLORS.bone);
-    box("xdp", withAlpha(COLORS.sre, 0.22), COLORS.sre, 14);
-    box("ml", withAlpha(COLORS.ai, 0.16), COLORS.ai, 6);
-    box("tls", withAlpha(COLORS.bone, 0.1), COLORS.bone, 7);
-    box("metrics", withAlpha(COLORS.sre, 0.14), COLORS.sre, 6);
-    // the active zone, edged in zari
-    const zone = ["xdp", "ml", "tls", "metrics"][ext.zone ?? -1];
-    if (zone) {
-      const z = g.zones[zone];
-      r.line(z.x - 4, z.y - 4, z.x + z.w + 4, z.y - 4, 2, COLORS.zari); r.line(z.x - 4, z.y + z.h + 4, z.x + z.w + 4, z.y + z.h + 4, 2, COLORS.zari);
-      r.line(z.x - 4, z.y - 4, z.x - 4, z.y + z.h + 4, 2, COLORS.zari); r.line(z.x + z.w + 4, z.y - 4, z.x + z.w + 4, z.y + z.h + 4, 2, COLORS.zari);
+    const upFrom = { a: L.branch, b: L.lanes[0] }, upTo = { a: (ml[0] + ml[1]) / 2, b: ml[3] };
+    const metFrom = { a: bin[1], b: (bin[2] + bin[3]) / 2 }, metTo = { a: met[0], b: (met[2] + met[3]) / 2 };
+    for (const [A, B] of [[upFrom, upTo], [metFrom, metTo]] as const) {
+      let prev = P(A.a, A.b);
+      for (let k = 1; k <= 28; k++) {
+        const c = curve(A.a, A.b, B.a, B.b, k / 28), q = P(c.a, c.b);
+        if (k % 2) r.line(prev.x, prev.y, q.x, q.y, 1.2, withAlpha(COLORS.threadHi, 0.9));
+        prev = q;
+      }
     }
 
-    // traffic: mostly clean, some attacks, a rare packet bound for the ML ensemble
-    if (!f.reduced) {
-      while (clock >= next) {
-        const roll = Math.random();
-        pkts.push({ a: 0.03, b: 0.44 + Math.random() * 0.14, kind: roll < 0.2 ? 1 : roll < 0.24 ? 2 : 0, state: "fly", t: clock, vy: 0 });
-        next += 40 + Math.random() * 40;
+    // ── the NIC as a reed: a comb the lanes pass between ──
+    {
+      const b0 = L.lanes[0] - 0.03, b1 = L.lanes[L.lanes.length - 1] + 0.03;
+      const d = 5 / g.pxA;
+      seg(L.reed - d, b0, L.reed - d, b1, 2, COLORS.bone);
+      seg(L.reed + d, b0, L.reed + d, b1, 2, COLORS.bone);
+      for (let k = 0; k <= L.lanes.length; k++) {
+        const b = k === 0 ? b0 + 0.006 : k === L.lanes.length ? b1 - 0.006 : (L.lanes[k - 1] + L.lanes[k]) / 2;
+        seg(L.reed - d, b, L.reed + d, b, 2.5, withAlpha(COLORS.bone, 0.8));
       }
-    } else if (pkts.length === 0) {
-      for (let i = 0; i < 26; i++) pkts.push({ a: 0.04 + (i / 26) * 0.8, b: 0.45 + ((i * 37) % 13) / 100, kind: i % 5 === 1 ? 1 : 0, state: "fly", t: 0, vy: 0 });
-      ext.screened = 12840; ext.dropped = 2310; ext.upward = 32;
     }
-    const speed = 0.00042 * dt;
-    pkts = pkts.filter((p) => {
-      if (!f.reduced) {
-        if (p.state === "fly") {
-          const before = p.a;
-          p.a += speed;
-          if (before < 0.31 && p.a >= 0.31) {
-            ext.screened = (ext.screened ?? 0) + 1;
-            if (p.kind === 1) {
-              p.state = "drop"; ext.dropped = (ext.dropped ?? 0) + 1;
-              dots.push({ t0: clock, from: { a: 0.31, b: 0.72 } });
-            }
-          }
-          if (p.kind === 2 && before < 0.46 && p.a >= 0.46) { p.state = "up"; ext.upward = (ext.upward ?? 0) + 1; }
-          if (p.a > 0.82) return false;
-        } else if (p.state === "drop") {
-          p.vy += 0.0000026 * dt; p.b += p.vy * dt;
-          if (p.b > 0.95) return false;
-        } else {
-          p.a += speed * 0.55; p.b -= speed * 1.25;
-          if (p.b < 0.16) return false;
+
+    // ── XDP: a heddle frame on a green ground, with the scan line where packets are judged ──
+    const frame = (s: Span, c: RGBA, fillA: number, wires: number) => {
+      const [a0, a1, b0, b1] = s;
+      R((a0 + a1) / 2, (b0 + b1) / 2, (a1 - a0) * g.pxA, (b1 - b0) * g.pxB, withAlpha(c, fillA));
+      // heddle wires across the flow
+      for (let k = 1; k < wires; k++) { const a = lerp(a0, a1, k / wires); seg(a, b0, a, b1, 1, withAlpha(c, 0.16)); }
+      seg(a0, b0, a1, b0, 1.5, c); seg(a0, b1, a1, b1, 1.5, c); seg(a0, b0, a0, b1, 1.5, c); seg(a1, b0, a1, b1, 1.5, c);
+    };
+    frame(xdp, COLORS.sre, 0.1, Math.round(((xdp[1] - xdp[0]) * g.pxA) / 12));
+    // the scan line, brightening on each lane as a packet is read
+    L.lanes.forEach((b, i) => {
+      const hit = pkts.some((p) => p.lane === i && p.state === "caught") ? 1 : 0;
+      const k = since(flash[i], 220);
+      seg(L.check, b - 0.016, L.check, b + 0.016, 2 + 2 * k, hit ? COLORS.web3 : withAlpha(COLORS.sre, 0.45 + 0.55 * k));
+    });
+    seg(L.check, xdp[2] + 0.1, L.check, L.lanes[0] - 0.02, 1, withAlpha(COLORS.sre, 0.5));
+    seg(L.check, L.lanes[L.lanes.length - 1] + 0.02, L.check, xdp[3] - 0.012, 1, withAlpha(COLORS.sre, 0.5));
+
+    // ── the kernel's bin: every drop lands here as a saffron pick ──
+    frame(bin, withAlpha(COLORS.web3, 0.75), 0.06, 1);
+    binPicks.forEach((slot, k) => {
+      const s = slotAt(slot);
+      const age = (binPicks.length - 1 - k) / Math.max(1, binCap);
+      R(s.a, s.b, 9, 4, withAlpha(scale(COLORS.web3, k % 2 ? 1 : 0.82), 0.95 - 0.55 * age));
+    });
+
+    // ── userspace: the ML ensemble, a decision tree and a small neural net ──
+    frame(ml, COLORS.ai, 0.07, 1);
+    {
+      const ka = now - mlAt;
+      const lit = (t0: number, t1: number) => (ka < t0 ? 0 : ka < t1 ? (ka - t0) / (t1 - t0) : ka < 1900 ? 1 : Math.max(0, 1 - (ka - 1900) / 600));
+      const U = (u: number, v: number) => ({ a: lerp(ml[0], ml[1], u), b: lerp(ml[2], ml[3], v) });
+      const node = (u: number, v: number, on: number) => { const q = U(u, v); R(q.a, q.b, 6, 6, on > 0.5 ? COLORS.ai : withAlpha(COLORS.threadHi, 1)); };
+      const edge = (u0: number, v0: number, u1: number, v1: number, on: number) => {
+        const p = U(u0, v0), q = U(u1, v1);
+        seg(p.a, p.b, q.a, q.b, on > 0 ? 1.5 : 1, on > 0 ? withAlpha(COLORS.ai, 0.35 + 0.65 * on) : withAlpha(COLORS.threadHi, 0.8));
+      };
+      // the tree: its root splits twice, and one path to a leaf lights
+      const leaves = [0.2, 0.4, 0.6, 0.8];
+      const l1 = mlLeaf < 2 ? 0 : 1;
+      [[0.3, 0], [0.7, 1]].forEach(([v, side]) => {
+        edge(0.1, 0.5, 0.26, v, side === l1 ? lit(0, 200) : 0);
+        leaves.slice(side * 2, side * 2 + 2).forEach((lv, j) => edge(0.26, v, 0.42, lv, side * 2 + j === mlLeaf ? lit(200, 420) : 0));
+      });
+      node(0.1, 0.5, lit(0, 1)); node(0.26, 0.3, l1 === 0 ? lit(0, 200) : 0); node(0.26, 0.7, l1 === 1 ? lit(0, 200) : 0);
+      leaves.forEach((lv, j) => node(0.42, lv, j === mlLeaf ? lit(200, 420) : 0));
+      // the network: three inputs, four hidden, two out
+      const layers = [[0.3, 0.5, 0.7], [0.2, 0.4, 0.6, 0.8], [0.38, 0.62]], us = [0.56, 0.7, 0.84];
+      for (let li = 0; li < 2; li++) layers[li].forEach((v0) => layers[li + 1].forEach((v1) => edge(us[li], v0, us[li + 1], v1, lit(250 + li * 200, 450 + li * 200) * 0.7)));
+      layers.forEach((col, li) => col.forEach((v) => node(us[li], v, lit(250 + li * 200, 450 + li * 200))));
+      // the vote's confidence, filling along the panel's far edge
+      const conf = lit(650, 1050) * mlConf;
+      const c0 = U(0.95, 0.88), c1 = U(0.95, 0.88 - 0.76 * conf), cT = U(0.95, 0.12);
+      seg(c0.a, c0.b, cT.a, cT.b, 4, withAlpha(COLORS.threadHi, 0.7));
+      if (conf > 0.01) seg(c0.a, c0.b, c1.a, c1.b, 4, COLORS.ai);
+    }
+
+    // ── prometheus: drops per window as woven bars; the frame turns saffron while alerting ──
+    const alerting = now < alertUntil;
+    const pulse = alerting ? 0.6 + 0.4 * Math.sin(now / 120) : 0;
+    frame(met, alerting ? lerpColor(COLORS.sre, COLORS.web3, pulse) : COLORS.sre, 0.07, 1);
+    {
+      const pad = 0.12;
+      const top = Math.max(8, ...bars);
+      bars.forEach((n, i) => {
+        const a = lerp(met[0], met[1], pad / 2 + (1 - pad) * ((i + 0.5) / COLS));
+        const picks = Math.round((n / top) * 9);
+        for (let k = 0; k < picks; k++) {
+          const b = met[3] - (8 + k * 6) / g.pxB;
+          R(a, b, Math.max(4, (((met[1] - met[0]) * g.pxA) / COLS) * 0.6), 4, withAlpha(i === COLS - 1 ? COLORS.zari : scale(COLORS.sre, k % 2 ? 1 : 0.8), 0.95));
         }
+      });
+    }
+    // metric dots on their way from the bin
+    dots.forEach((d) => {
+      const k = clamp((now - d.t0) / 800);
+      const c = curve(metFrom.a, metFrom.b, metTo.a, metTo.b, k);
+      R(c.a, c.b, 5, 5, COLORS.sre, Math.PI / 4);
+    });
+
+    // ── the app: clean requests become its cloth, read after TLS by a uprobe at the door ──
+    frame(tls, COLORS.bone, 0.05, 1);
+    // inside, the lanes carry on as the app's own warp, and each served request settles on it
+    // as a pick, drifting deeper into the app as newer ones arrive
+    L.lanes.forEach((b) => seg(tls[0], b, tls[1], b, 1, withAlpha(COLORS.threadHi, 0.55)));
+    cloth.forEach((p) => {
+      const k = (now - p.t0) / CLOTH_MS;
+      const a = tls[0] + 0.014 + k * (tls[1] - tls[0] - 0.03);
+      const b = L.lanes[p.lane];
+      const al = 0.95 - 0.6 * k;
+      R(a - 3 / g.pxA, b, 9, 4, withAlpha(scale(COLORS.bone, p.n % 2 ? 1 : 0.78), al));
+      R(a + 3.5 / g.pxA, b, 3, 6, withAlpha(COLORS.sre, al));
+    });
+    L.lanes.forEach((b, i) => {
+      const k = since(hook[i], 260);
+      const d = 4 / g.pxA, e = 0.018;
+      seg(tls[0] - d, b - e, tls[0] - d, b + e, 1.5 + k, withAlpha(COLORS.sre, 0.4 + 0.6 * k));
+      seg(tls[0] - d, b - e, tls[0] - d - 4 / g.pxA, b - e, 1.5, withAlpha(COLORS.sre, 0.4 + 0.6 * k));
+    });
+
+    // ── packets: all alike until XDP reads them ──
+    for (const p of pkts) {
+      const b = L.lanes[p.lane];
+      if (p.state === "fly") {
+        const body = withAlpha(COLORS.bone, 0.92);
+        const nib = !p.seen ? scale(COLORS.bone, 0.5) : p.kind === 2 ? COLORS.ai : COLORS.sre;
+        R(p.a - 3 / g.pxA, b, 11, 4, p.seen && p.kind === 2 ? withAlpha(COLORS.ai, 0.9) : body);
+        R(p.a + 5 / g.pxA, b, 4, 6, nib);
+      } else if (p.state === "caught") {
+        // caught: the packet turns saffron and crosses itself out on the scan line
+        const q = P(p.a, b), s = 6;
+        r.line(q.x - s, q.y - s, q.x + s, q.y + s, 2.5, COLORS.web3); r.line(q.x - s, q.y + s, q.x + s, q.y - s, 2.5, COLORS.web3);
+      } else if (p.state === "chute") {
+        // and falls out of the path into the bin, gathering speed
+        const k = clamp((now - p.t) / 520), s = slotAt(p.slot);
+        const a = lerp(p.a, s.a, k), bb = lerp(b, s.b, k * k);
+        R(a, bb, 9, 4, COLORS.web3, (1 - k) * 0.6);
+      } else {
+        const k = clamp((now - p.t) / 900);
+        const c = curve(upFrom.a, upFrom.b, upTo.a, upTo.b, k);
+        R(c.a, c.b, 9, 4, COLORS.ai);
       }
-      const q = P(p.a, p.b);
-      const along = 10, across = 5;
-      const c = p.kind === 1 ? COLORS.web3 : p.kind === 2 ? COLORS.ai : COLORS.bone;
-      if (p.state === "drop") {
-        // a drop: the packet turns into a cross as it falls out of the path
-        r.line(q.x - 5, q.y - 5, q.x + 5, q.y + 5, 2, c); r.line(q.x - 5, q.y + 5, q.x + 5, q.y - 5, 2, c);
-      } else if (g.vertical) r.rect(q.x, q.y, across, along, c);
-      else r.rect(q.x, q.y, along, across, c);
-      return true;
-    });
-    // every drop sends a metric down to prometheus
-    dots = dots.filter((d) => {
-      const k = (clock - d.t0) / 900;
-      if (k >= 1) return false;
-      const q = P(lerp(d.from.a, 0.61, k), lerp(d.from.b, 0.85, k));
-      r.rect(q.x, q.y, 5, 5, COLORS.sre);
-      return true;
-    });
+    }
+
+    // ── the zone being read: everything else steps back ──
+    const zone = (["xdp", "ml", "tls", "metrics"] as const)[ext.zone ?? -1];
+    if (zone) {
+      const z = zone === "xdp" ? { x: Math.min(Z.xdp.x, Z.bin.x), y: Math.min(Z.xdp.y, Z.bin.y), w: 0, h: 0 } : Z[zone];
+      if (zone === "xdp") {
+        z.w = Math.max(Z.xdp.x + Z.xdp.w, Z.bin.x + Z.bin.w) - z.x;
+        z.h = Math.max(Z.xdp.y + Z.xdp.h, Z.bin.y + Z.bin.h) - z.y;
+      }
+      const pad = 10, x0 = z.x - pad, y0 = z.y - pad, x1 = z.x + z.w + pad, y1 = z.y + z.h + pad;
+      const veil = withAlpha(COLORS.warp, 0.62);
+      r.rect(w / 2, y0 / 2, w, y0, veil); r.rect(w / 2, (y1 + h) / 2, w, h - y1, veil);
+      r.rect(x0 / 2, (y0 + y1) / 2, x0, y1 - y0, veil); r.rect((x1 + w) / 2, (y0 + y1) / 2, w - x1, y1 - y0, veil);
+      r.line(x0, y0, x1, y0, 2, COLORS.zari); r.line(x0, y1, x1, y1, 2, COLORS.zari);
+      r.line(x0, y0, x0, y1, 2, COLORS.zari); r.line(x1, y0, x1, y1, 2, COLORS.zari);
+    }
     r.flush();
   };
 }

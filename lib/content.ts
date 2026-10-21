@@ -118,7 +118,7 @@ export const DOMAINS: {
       "When the dashboards aren't enough, I go down to the packets themselves, in the kernel.",
     ],
     bridge: { before: "Today I practise that craft on ", link: "blockchains", to: "#chains", tone: "web3", after: "." },
-    stageNote: "My XDP filter as a live sketch: synthetic traffic, real design. The sketch sends far more packets up than the real 1 in 403, so you can see them go. Pick a stage of the path to read about it.",
+    stageNote: "My XDP filter as a live sketch: synthetic traffic, real design. Packets all look alike until the kernel reads them. The sketch sends far more up than the real 1 in 403, and stages an attack burst every few seconds so you can watch the alert fire. Pick a stage of the path to read about it.",
     ledger: [
       {
         title: "XDP attack filter",

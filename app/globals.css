@@ -304,6 +304,29 @@ em { font-style: normal; font-weight: 600; }
 [data-vertical] .zone .zone-chip.z-tls { left: 50%; transform: translate(-50%, calc(-100% - 6px)); }
 .packet-counters { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 14px; font-family: var(--font-mono), monospace; font-size: 0.8125rem; color: var(--mute); }
 .packet-counters strong { color: var(--bone); font-weight: 500; font-variant-numeric: tabular-nums; }
+.packet-counters span { display: inline-flex; align-items: center; gap: 6px; }
+/* each counter keys to the packet it counts: bone read, saffron dropped, pink sent up */
+.packet-counters .sw { display: inline-block; width: 12px; height: 4px; margin-right: 2px; }
+.packet-counters .sw-seen { background: linear-gradient(to right, var(--bone) 8px, var(--sre) 8px); }
+.packet-counters .sw-drop { background: var(--web3); }
+.packet-counters .sw-up { background: var(--ai); }
+/* the XDP program's four patterns, sitting on the frame's ground above the lanes */
+.xdp-rules {
+  position: absolute; z-index: 2; pointer-events: none; margin: 0; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 4px;
+}
+.xdp-rules li {
+  padding: 2px 5px; background: var(--warp-deep); border: 1px solid color-mix(in srgb, var(--sre) 60%, transparent);
+  font: 500 0.75rem/1.4 var(--font-mono), monospace; color: var(--mute);
+  transition: color 0.15s ease-out, border-color 0.15s ease-out, background-color 0.15s ease-out;
+}
+.xdp-rules li[data-hit] { color: var(--warp); background: var(--web3-ink); border-color: var(--web3-ink); transition-duration: 0s; }
+.zone-chip .alert { color: var(--web3-ink); }
+.zone-chip[data-alert] { border-color: var(--web3-ink); }
+/* on phones the chip only changes colour, so it never grows into its neighbour */
+[data-vertical] .zone-chip .alert { display: none; }
+[data-vertical] .zone-chip[data-alert] { color: var(--web3-ink); }
+[data-vertical] .xdp-rules { display: grid; grid-template-columns: repeat(2, max-content); justify-content: center; align-content: center; }
 .d-web3 .stage-box { height: min(60svh, 540px); }
 .d-web3 .stage-canvas { mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent); }
 .stage figcaption { margin-top: 14px; font-size: 0.9375rem; color: var(--mute); max-width: 60ch; }
